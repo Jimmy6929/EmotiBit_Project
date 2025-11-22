@@ -1,159 +1,157 @@
-# **EmotiBit Sensor-Only Firmware (No Display, No Time Functions)**
+# **EmotiBit + ThinkInk Clock (V1)**
 
-This firmware runs an **EmotiBit ESP32** as a **pure sensor module**.
-All display, timekeeping, and ThinkInk e-ink code has been removed to make the system lightweight and reliable for data collection, prototyping, and integration with external systems.
-
-The sketch continuously:
-
-* Starts and manages the EmotiBit firmware
-* Reads **PPG (green)**, **EDA**, and **Thermopile temperature**
-* Stores the most recent sample from each sensor
-* Prints all sensor values over **USB Serial**
-* Supports built-in EmotiBit button functions
-* Keeps a fast, responsive main loop
-
-No Wi-Fi, no Bluetooth, no e-ink display, no clocks, no SD writing — **just sensors + Serial output**.
+A stable, low-power ESP32 firmware that lets the **EmotiBit biosignal module** run normally while independently driving a **ThinkInk SSD1681 e-ink display** to show a simple clock (HH:MM).
+This Version 1 architecture ensures **zero interference** with EmotiBit’s sensors.
 
 ---
 
-## 🚀 Features
+# ⭐ Project Overview
 
-### ✔ Live Sensor Streaming
+This project uses a **single ESP32** but splits functionality into two completely separate logical modules:
 
-The code uses the EmotiBit library to read:
+### **1. EmotiBit Core (unchanged)**
 
-* **PPG_GREEN** – optical heart/PPG waveform
-* **EDA** – electrodermal activity / skin conductance
-* **THERMOPILE** – skin/ambient temperature
+* Runs official EmotiBit firmware
+* Manages PPG/EDA/temp sensors
+* Handles power modes, sampling, button logic
+* High-frequency sensor acquisition remains untouched
 
-Values are updated continuously and streamed over USB.
+### **2. ClockDisplay Module (your code)**
 
-### ✔ High-Speed Serial Output
+* Uses a **dedicated VSPI bus**
+* Drives a ThinkInk 200×200 e-ink display (SSD1681)
+* Shows only **HH:MM** (starting from hard-coded time)
+* Refreshes **once per minute**
+* Lightweight, non-blocking loop
 
-Runs at:
-
-```
-2000000 baud
-```
-
-for fast, low-latency data output.
-
-### ✔ EmotiBit Button Integration
-
-The built-in button controls power modes:
-
-* **Short press** → Toggle between:
-
-  * `NORMAL_POWER`
-  * `WIRELESS_OFF`
-* **Long press** → Puts the EmotiBit into **sleep mode**
-
-### ✔ Lightweight Main Loop
-
-* No blocking delays
-* No display refreshes
-* No timing functions
-* Only `delay(1)` to prevent CPU overload
-
-Perfect for stable long-term logging.
+This separation guarantees that the display **never affects sensor performance**, timing, or power stability.
 
 ---
 
-## 📁 Project Structure
+# 🔌 Hardware Setup
+
+## **ThinkInk (SSD1681) Pin Map — VSPI (Final, Confirmed)**
+
+These are the **correct**, **verified**, and **stable** pins for your ThinkInk display:
+
+| Signal    | ESP32 Pin | Description                        |
+| --------- | --------- | ---------------------------------- |
+| **SCK**   | **18**    | SPI clock                          |
+| **MOSI**  | **23**    | SPI Master → Display data          |
+| **MISO**  | **19**    | Display → ESP32 data (rarely used) |
+| **CS**    | **5**     | Chip Select                        |
+| **DC**    | **16**    | Data/Command mode                  |
+| **RESET** | **17**    | Display reset                      |
+| **BUSY**  | **4**     | E-ink busy indicator               |
+
+### Why these pins?
+
+* They follow native **VSPI** hardware routing
+* They avoid **all EmotiBit pins**
+* They support fast, stable communication
+* They prevent sensor-timing interference
+
+---
+
+# 🧩 Software Behavior
+
+### ✔ Non-blocking Timekeeping
+
+* Internal software clock using `millis()`
+* No delays longer than **5 ms**
+* Minutes increment based on elapsed time
+
+### ✔ Safe Display Refresh Scheduler
+
+* Redraw only when:
+  ✔ display is not busy
+  ✔ one minute has passed
+* Ensures no blocking during EmotiBit sampling
+
+### ✔ Simple Display Output
+
+* White background
+* Black “HH:MM”
+* Full refresh only on minute change
+
+### ❌ V1 intentionally *does not include*:
+
+* Wi-Fi time sync
+* Real RTC
+* Biosignal icons or graphs
+* Any EmotiBit → display interaction
+
+This keeps V1 **stable** and **predictable**.
+
+---
+
+# ⚙ Stability Principles (V1 Rules)
+
+These rules ensure EmotiBit sensor performance remains untouched:
+
+* **Dedicated VSPI bus** for ThinkInk
+* **Never block the loop**
+* **Never refresh more frequently than 30–60 seconds**
+* **Never share pins with EmotiBit systems**
+* **Keep memory usage minimal**
+* **Low current draw except during scheduled refresh**
+* **Allow EmotiBit scheduler to run freely**
+
+This is the entire philosophy of V1.
+
+---
+
+# 🧪 How to Use
+
+1. Connect the display using the **confirmed pin map** above.
+2. Flash the firmware to the **EmotiBit ESP32 Feather**.
+3. Power the board via USB or regulated 3.3V.
+4. The display will show the starting time (e.g., 12:00).
+5. The display updates once per minute.
+6. EmotiBit sensors continue running normally.
+
+---
+
+# 📚 Folder Structure (Recommended)
 
 ```
-EmotiBit-SensorOnly/
-│
-├── EmotiBit_SensorOnly.ino   # Main code (provided in this repo)
-└── README.md                 # This file
+/src
+  EmotiBitCore/     -> unmodified EmotiBit firmware
+  ClockDisplay/     -> ThinkInk VSPI display logic
+  main.cpp          -> high-level coordinator
+/docs
+  README.md
+  wiring-diagram.png
+  architecture-V1.png
 ```
 
 ---
 
-## 🔧 Hardware Requirements
+# 🚀 Future V2+ Goals (Not in V1)
 
-* **EmotiBit ESP32 board**
-* USB cable for power + Serial communication
-* Computer or device that can read Serial data
+These are for later versions while keeping V1 stable:
 
-No external display or SD card is required.
+* RTC-based real time
+* Battery-aware refresh
+* Stress/event icons using biosignal thresholds
+* TinyML inference model
+* Display-driven low-battery notifications
+* On-device assistant logic
 
----
-
-## 📦 Required Libraries
-
-The following library must be installed:
-
-* **EmotiBit Arduino library**
-  (Available through EmotiBit’s GitHub or the Arduino Library Manager)
-
-Arduino automatically includes:
-
-* `Arduino.h`
+But all future features will maintain the **separation-of-concerns** that makes V1 stable.
 
 ---
 
-## 🖥 Serial Output Format
+# 📝 License
 
-Each loop prints the latest values:
-
-```
-PPG: <value>  EDA: <value>  TEMP: <value>
-```
-
-Example:
-
-```
-PPG: 14356.78  EDA: 0.215  TEMP: 32.47
-```
-
-You can pipe this into:
-
-* Python applications
-* Serial plotters
-* Data loggers
-* Custom PC dashboards
-* Machine learning scripts
+MIT License
 
 ---
 
-## ▶️ How to Use
+# 🙌 Author
 
-1. Open the `.ino` file in Arduino IDE.
-2. Select the correct board (EmotiBit ESP32) and port.
-3. Upload the code.
-4. Open **Serial Monitor** at **2,000,000 baud**.
-5. Watch live sensor data stream in real-time.
+Jimmy Chu
+AI-assisted firmware architecture by ChatGPT
 
----
+Just tell me!
 
-## 🧠 How the Code Works (Summary)
-
-1. **EmotiBit initialises**
-
-   * Sensors activated
-   * Internal buffers created
-
-2. **Every loop:**
-
-   * `emotibit.update()` manages internal tasks
-   * `pollEmotiBitData()` reads sensor buffers
-   * Latest values stored into `lastPPG`, `lastEDA`, `lastTempC`
-   * Values printed to Serial
-   * 1 ms delay to avoid CPU overload
-
-3. **Button Press Logic:**
-
-   * Toggles wireless power mode or enters sleep.
-
----
-
-## 📌 Key Code Functions
-
-| Function               | Description                                     |
-| ---------------------- | ----------------------------------------------- |
-| `pollEmotiBitData()`   | Reads new sensor data and updates latest values |
-| `emotibit.update()`    | Required for EmotiBit internal processing       |
-| `onShortButtonPress()` | Toggles power mode                              |
-| `onLongButtonPress()`  | Puts device into sleep                          |
-| `Serial.println()`     | Sends data to host computer                     |
